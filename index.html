@@ -369,10 +369,17 @@
         
         // Inicializar gráfico de métricas
         function initializeMetricsChart() {
+            // Destruir el gráfico existente si hay alguno
+            if (metricsChart) {
+                metricsChart.destroy();
+            }
+            
             const ctx = document.getElementById('metricsChart').getContext('2d');
             
             const isDarkMode = document.documentElement.classList.contains('dark');
             const textColor = isDarkMode ? '#e5e7eb' : '#4b5563';
+            
+            Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
             
             metricsChart = new Chart(ctx, {
                 type: 'line',
@@ -386,7 +393,9 @@
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#3b82f6'
+                            pointBackgroundColor: '#3b82f6',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Reputación',
@@ -395,7 +404,9 @@
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#10b981'
+                            pointBackgroundColor: '#10b981',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Clima Laboral',
@@ -404,17 +415,27 @@
                             backgroundColor: 'rgba(245, 158, 11, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#f59e0b'
+                            pointBackgroundColor: '#f59e0b',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         }
                     ]
                 },
                 options: {
+                    responsive: true,
+                    animation: {
+                        duration: 1000
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
                             max: 100,
                             ticks: {
-                                color: textColor
+                                color: textColor,
+                                font: {
+                                    size: 11
+                                },
+                                stepSize: 25
                             },
                             grid: {
                                 color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
@@ -422,7 +443,10 @@
                         },
                         x: {
                             ticks: {
-                                color: textColor
+                                color: textColor,
+                                font: {
+                                    size: 11
+                                }
                             },
                             grid: {
                                 color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
@@ -432,20 +456,64 @@
                     plugins: {
                         legend: {
                             display: false
+                        },
+                        tooltip: {
+                            backgroundColor: isDarkMode ? '#374151' : 'rgba(255, 255, 255, 0.9)',
+                            titleColor: isDarkMode ? '#ffffff' : '#111827',
+                            bodyColor: isDarkMode ? '#e5e7eb' : '#4b5563',
+                            borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: true,
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    return tooltipItems[0].label === 'Inicio' ? 'Inicio' : `Ronda ${tooltipItems[0].label.replace('Ronda ', '')}`;
+                                }
+                            }
                         }
                     },
                     maintainAspectRatio: false
                 }
             });
+            
+            console.log("Gráfico inicializado con datos:", {
+                finances: metrics.finances,
+                reputation: metrics.reputation,
+                workClimate: metrics.workClimate
+            });
         }
         
         // Actualizar gráfico de métricas
         function updateMetricsChart() {
-            metricsChart.data.labels = Array.from({length: currentRound + 1}, (_, i) => i === 0 ? 'Inicio' : `Ronda ${i}`);
-            metricsChart.data.datasets[0].data = historicalMetrics.finances;
-            metricsChart.data.datasets[1].data = historicalMetrics.reputation;
-            metricsChart.data.datasets[2].data = historicalMetrics.workClimate;
-            metricsChart.update();
+            // Asegurarse de que el gráfico exista
+            if (!metricsChart) {
+                console.error("El gráfico no está inicializado");
+                return;
+            }
+            
+            try {
+                // Actualizar etiquetas con la longitud correcta
+                const labels = Array.from({length: historicalMetrics.finances.length}, (_, i) => 
+                    i === 0 ? 'Inicio' : `Ronda ${i}`
+                );
+                
+                metricsChart.data.labels = labels;
+                metricsChart.data.datasets[0].data = [...historicalMetrics.finances];
+                metricsChart.data.datasets[1].data = [...historicalMetrics.reputation];
+                metricsChart.data.datasets[2].data = [...historicalMetrics.workClimate];
+                
+                // Forzar actualización completa
+                metricsChart.update('none');
+                
+                console.log("Gráfico actualizado:", {
+                    labels,
+                    finances: [...historicalMetrics.finances],
+                    reputation: [...historicalMetrics.reputation],
+                    workClimate: [...historicalMetrics.workClimate]
+                });
+            } catch (error) {
+                console.error("Error al actualizar el gráfico:", error);
+            }
         }
         
         // Llamada a la API de Gemini
@@ -622,9 +690,13 @@ Importante: Solo devuelve el objeto JSON, sin texto adicional, código o formato
             const option = scenario.options[optionIndex];
             
             // Actualizar métricas
-            const newFinances = Math.min(100, Math.max(0, metrics.finances + option.impact.finances));
-            const newReputation = Math.min(100, Math.max(0, metrics.reputation + option.impact.reputation));
-            const newWorkClimate = Math.min(100, Math.max(0, metrics.workClimate + option.impact.workClimate));
+            const newFinances = Math.min(100, Math.max(0, metrics.finances + Number(option.impact.finances)));
+            const newReputation = Math.min(100, Math.max(0, metrics.reputation + Number(option.impact.reputation)));
+            const newWorkClimate = Math.min(100, Math.max(0, metrics.workClimate + Number(option.impact.workClimate)));
+            
+            console.log("Valores antiguos:", metrics);
+            console.log("Impacto:", option.impact);
+            console.log("Nuevos valores:", {newFinances, newReputation, newWorkClimate});
             
             // Registrar los cambios para el historial
             historicalMetrics.finances.push(newFinances);
@@ -643,20 +715,22 @@ Importante: Solo devuelve el objeto JSON, sin texto adicional, código o formato
             metrics.reputation = newReputation;
             metrics.workClimate = newWorkClimate;
             
-            // Actualizar gráfico
-            updateMetricsChart();
-            
-            // Mostrar feedback
-            displayFeedback(option);
-            
-            // Deshabilitar opciones
+            // Deshabilitar la selección de opciones para evitar múltiples clics
             Array.from(optionsContainer.children).forEach(element => {
-                element.removeEventListener('click', selectOption);
+                element.removeEventListener('click', () => selectOption(parseInt(element.getAttribute('data-index')), scenario));
                 element.classList.remove('hover:bg-gray-50', 'cursor-pointer', 'dark:hover:bg-gray-700');
                 if (parseInt(element.getAttribute('data-index')) === optionIndex) {
                     element.classList.add('bg-primary', 'bg-opacity-10', 'border-primary');
                 }
             });
+            
+            // Mostrar feedback
+            displayFeedback(option);
+            
+            // Forzar actualización del gráfico con un pequeño retardo para asegurar que los datos estén actualizados
+            setTimeout(() => {
+                updateMetricsChart();
+            }, 100);
         }
         
         // Mostrar feedback de la decisión
@@ -805,6 +879,11 @@ Responde con un análisis completo y constructivo en formato de párrafos, con u
         
         // Inicializar gráfico final
         function initializeFinalChart() {
+            // Destruir el gráfico existente si hay alguno
+            if (finalMetricsChart) {
+                finalMetricsChart.destroy();
+            }
+            
             const ctx = document.getElementById('finalMetricsChart').getContext('2d');
             
             const isDarkMode = document.documentElement.classList.contains('dark');
@@ -817,40 +896,54 @@ Responde con un análisis completo y constructivo en formato de párrafos, con u
                     datasets: [
                         {
                             label: 'Finanzas',
-                            data: historicalMetrics.finances,
+                            data: [...historicalMetrics.finances],
                             borderColor: '#3b82f6',
                             backgroundColor: 'rgba(59, 130, 246, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#3b82f6'
+                            pointBackgroundColor: '#3b82f6',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Reputación',
-                            data: historicalMetrics.reputation,
+                            data: [...historicalMetrics.reputation],
                             borderColor: '#10b981',
                             backgroundColor: 'rgba(16, 185, 129, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#10b981'
+                            pointBackgroundColor: '#10b981',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         },
                         {
                             label: 'Clima Laboral',
-                            data: historicalMetrics.workClimate,
+                            data: [...historicalMetrics.workClimate],
                             borderColor: '#f59e0b',
                             backgroundColor: 'rgba(245, 158, 11, 0.1)',
                             tension: 0.3,
                             borderWidth: 2,
-                            pointBackgroundColor: '#f59e0b'
+                            pointBackgroundColor: '#f59e0b',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
                         }
                     ]
                 },
                 options: {
+                    responsive: true,
+                    animation: {
+                        duration: 1000
+                    },
                     scales: {
                         y: {
                             beginAtZero: true,
                             max: 100,
                             ticks: {
-                                color: textColor
+                                color: textColor,
+                                font: {
+                                    size: 11
+                                },
+                                stepSize: 25
                             },
                             grid: {
                                 color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
@@ -858,7 +951,10 @@ Responde con un análisis completo y constructivo en formato de párrafos, con u
                         },
                         x: {
                             ticks: {
-                                color: textColor
+                                color: textColor,
+                                font: {
+                                    size: 11
+                                }
                             },
                             grid: {
                                 color: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
@@ -871,10 +967,25 @@ Responde con un análisis completo y constructivo en formato de párrafos, con u
                             labels: {
                                 color: textColor
                             }
+                        },
+                        tooltip: {
+                            backgroundColor: isDarkMode ? '#374151' : 'rgba(255, 255, 255, 0.9)',
+                            titleColor: isDarkMode ? '#ffffff' : '#111827',
+                            bodyColor: isDarkMode ? '#e5e7eb' : '#4b5563',
+                            borderColor: isDarkMode ? '#4b5563' : '#e5e7eb',
+                            borderWidth: 1,
+                            padding: 10,
+                            displayColors: true
                         }
                     },
                     maintainAspectRatio: false
                 }
+            });
+            
+            console.log("Gráfico final inicializado con datos:", {
+                finances: [...historicalMetrics.finances],
+                reputation: [...historicalMetrics.reputation],
+                workClimate: [...historicalMetrics.workClimate]
             });
         }
         
